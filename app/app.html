@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Hello Electron React!</title>
+    <script>
+      (() => {
+        if (
+          typeof process !== 'object' ||
+          (typeof process === 'object' && !process.env.START_HOT)
+        ) {
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = './dist/style.css';
+          // HACK: Writing the script path should be done with webpack
+          document.getElementsByTagName('head')[0].appendChild(link);
+        }
+      })();
+    </script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Arimo:ital,wght@0,400;0,700;1,400;1,700&family=Lobster&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        font-family: 'Arimo', sans-serif;
+      }
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        font-family: 'Lobster', cursive;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script>
+      if (typeof process === 'object') {
+        const scripts = [];
+
+        const expressAppUrl = 'http://127.0.0.1:4242/index.html';
+
+        const { ipcRenderer } = require('electron');
+        // For electron-packager change cwd in spawn to app.getAppPath() and
+        // uncomment the app require below
+
+        const request = require('request');
+        const app = require('electron').remote.app;
+        console.log('path', app.getAppPath());
+        const node = require('child_process').fork(
+          `${app.getAppPath()}/server/server.js`,
+          []
+        );
+
+        node.on('close', code => {
+          console.log(`child process close all stdio with code ${code}`);
+        });
+
+        node.on('exit', code => {
+          console.log(`child process exited with code ${code}`);
+        });
+
+        node.on('message', console.log);
+        node.on('error', console.log);
+
+        if (process.env.NODE_ENV === 'development') {
+          // Dynamically insert the DLL script in development env in the
+          // renderer process
+          scripts.push('../dll/renderer.dev.dll.js');
+        }
+        if (process.env.START_HOT) {
+          // Dynamically insert the bundled app script in the renderer process
+          const port = process.env.PORT || 1212;
+          scripts.push(`http://localhost:${port}/dist/renderer.dev.js`);
+        } else {
+          scripts.push('./dist/renderer.prod.js');
+        }
+
+        if (scripts.length) {
+          document.write(
+            scripts
+              .map(script => `<script defer src="${script}"><\/script>`)
+              .join('')
+          );
+        }
+
+        let checkServerRunning = setInterval(() => {
+          request(expressAppUrl, (error, response, body) => {
+            if (!error && response.statusCode == 200) {
+              clearInterval(checkServerRunning);
+            }
+          });
+        }, 1000);
+      }
+    </script>
+
+    <script>
+      const { app } = require('electron').remote;
+
+      setTimeout(() => {
+        const script = document.createElement('script');
+        script.src = 'http://localhost:4242/primus/primus.js';
+        document.head.appendChild(script);
+      }, 2000);
+
+      const primusInterval = setInterval(() => {
+        console.log('Primus?', window.Primus);
+        if (window.Primus) {
+          const primusInstance = new window.Primus('http://localhost:4242');
+
+          primusInstance.write({
+            eventName: 'appUserDataPath',
+            payload: app.getPath('userData')
+          });
+          clearInterval(primusInterval);
+        }
+      }, 200);
+    </script>
+  </body>
+</html>
