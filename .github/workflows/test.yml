@@ -25,13 +25,14 @@ jobs:
 
       - name: yarn test
         env:
-          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           yarn package-ci
           yarn lint
 
 #          yarn ts
 
+# could fix with pinning ubuntu to 16.04 - wass3r
 # Failing beacuse virtual framebuffer not installed
 #          yarn build-e2e
 #          yarn test-e2e
