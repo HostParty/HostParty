@@ -62,11 +62,12 @@ const deleteToken = debounce(() => {
   keytar.deletePassword(keytarServiceName, config.botUsername);
   oauthToken = null;
   config.hasToken = false;
+  config.isPartying = false;
   db.set('config', config).write();
   primus.write({ eventName: 'requestConfigResponse', payload: config });
 }, 300);
 
-function validateToken(token) {
+const validateToken = debounce(token => {
   let innerToken = token;
   if (!innerToken) {
     innerToken = oauthToken;
@@ -93,7 +94,7 @@ function validateToken(token) {
       });
       deleteToken();
     });
-}
+}, 500);
 
 const updateTokenInKeychain = debounce((botUsername, payload) => {
   if (botUsername) {
@@ -106,6 +107,7 @@ const updateTokenInKeychain = debounce((botUsername, payload) => {
 }, 300);
 
 function fetchStreams() {
+  console.log('fetching streams');
   // state.streams = [
   //   "cmgriffing",
   //   "griffingandchill",
@@ -157,49 +159,6 @@ function fetchStreams() {
     });
 }
 
-function startHostParty(hostPartyConfig) {
-  state.isPartying = true;
-  if (hostPartyConfig) {
-    config = { ...config, ...hostPartyConfig };
-  }
-
-  state = cloneDeep(defaultState);
-
-  if (searchInterval) {
-    clearInterval(searchInterval);
-  }
-  searchInterval = setInterval(() => {
-    fetchStreams();
-  }, 30000);
-  fetchStreams();
-
-  // coerce config values against defaults
-  // eslint-disable-next-line
-  tmiClient = new tmi.client({
-    channels: [config.partyChannel],
-    identity: {
-      username: config.botUsername,
-      password: `OAuth ${oauthToken}`
-    }
-  });
-  tmiClient.connect();
-
-  tmiClient.on('message', (...args) => {
-    if (messageHandler) {
-      messageHandler(...args);
-    }
-  });
-}
-
-function stopHostParty() {
-  if (tmiClient) {
-    tmiClient.disconnect();
-    tmiClient = null;
-  }
-  clearInterval(searchInterval);
-  state.isPartying = false;
-}
-
 function changeStream() {
   const filteredStreams = state.streams.filter(stream => {
     return stream !== state.currentStream;
@@ -217,7 +176,8 @@ function changeStream() {
     ...cloneDeep(defaultState),
     streams: state.streams,
     currentStream: newStream,
-    currentStreamStart: Date.now()
+    currentStreamStart: Date.now(),
+    currentStreamDurationMs: config.currentStreamInitialDurationMs
   };
 
   primus.write({
@@ -225,6 +185,73 @@ function changeStream() {
     payload: newStream,
     currentStreamStart: state.currentStreamStart
   });
+  primus.write({
+    eventName: 'durationChange',
+    payload: config.currentStreamInitialDurationMs
+  });
+}
+
+function startHostParty(hostPartyConfig) {
+  console.log('starting host party');
+  state.isPartying = true;
+  if (hostPartyConfig) {
+    config = { ...config, ...hostPartyConfig };
+  }
+
+  state = cloneDeep(defaultState);
+
+  if (searchInterval) {
+    clearInterval(searchInterval);
+  }
+  searchInterval = setInterval(() => {
+    fetchStreams();
+  }, 30000);
+  fetchStreams()
+    .then(() => {
+      return changeStream();
+    })
+    .catch(() => {});
+
+  // coerce config values against defaults
+  // eslint-disable-next-line
+  tmiClient = new tmi.client({
+    channels: [config.partyChannel],
+    identity: {
+      username: config.botUsername,
+      password: `oauth:${oauthToken}`
+    }
+  });
+  tmiClient.connect();
+
+  // let lastErrorTimestamp = Date.now();
+  if (!checkTimestampInterval) {
+    checkTimestampInterval = setInterval(() => {
+      if (
+        state.currentStreamDurationMs + state.currentStreamStart <=
+        Date.now()
+      ) {
+        changeStream();
+      }
+    }, 100);
+  }
+
+  tmiClient.on('message', (...args) => {
+    if (messageHandler) {
+      messageHandler(...args);
+    }
+  });
+}
+
+function stopHostParty() {
+  if (tmiClient) {
+    tmiClient.disconnect();
+    tmiClient = null;
+  }
+  clearInterval(searchInterval);
+  if (checkTimestampInterval) {
+    clearInterval(checkTimestampInterval);
+  }
+  state.isPartying = false;
 }
 
 function createMessageHandler() {
@@ -321,6 +348,7 @@ async function startServers(serverConfig) {
 
     _spark.on('data', async data => {
       const { eventName, payload } = data;
+      console.log({ eventName });
       if (eventName === 'configChange') {
         const { isPartying } = state;
         if (isPartying) {
@@ -331,7 +359,10 @@ async function startServers(serverConfig) {
           startHostParty();
         }
 
-        db.set('config', config).write();
+        db.set('config', {
+          ...config,
+          isPartying: false
+        }).write();
       } else if (eventName === 'requestConfig') {
         primus.write({ eventName: 'requestConfigResponse', payload: config });
       } else if (eventName === 'requestState') {
@@ -342,13 +373,6 @@ async function startServers(serverConfig) {
         startHostParty();
       } else if (eventName === 'stopHostParty') {
         stopHostParty();
-      } else if (eventName === 'resetVotes') {
-        state.currentStreamVoteCount = 0;
-        primus.write({
-          eventName: 'voteCount',
-          payload: state.currentStreamVoteCount,
-          shouldUpdateTimestamp: true
-        });
       } else if (eventName === 'appUserDataPath') {
         const adapter = new FileSync(path.join(payload, 'db.json'));
         db = low(adapter);
@@ -382,28 +406,10 @@ async function startServers(serverConfig) {
       }
     });
 
-    let lastErrorTimestamp = Date.now();
-    if (!checkTimestampInterval) {
-      checkTimestampInterval = setInterval(() => {
-        if (
-          state.currentStreamDurationMs + state.currentStreamStart <
-            Date.now() &&
-          Date.now() - lastErrorTimestamp > 30000
-        ) {
-          changeStream();
-          lastErrorTimestamp = Date.now();
-        }
-      }, 100);
-    }
-
     primus.write({
       eventName: 'changeStream',
       payload: state.currentStream,
       initialConfigPassing: true
-    });
-    primus.write({
-      eventName: 'voteCount',
-      payload: state.currentStreamVoteCount
     });
   });
 }

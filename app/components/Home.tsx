@@ -1,5 +1,5 @@
 /* eslint-disable jsx-a11y/label-has-associated-control */
-import React, { useState, useReducer } from 'react';
+import React, { useState, useReducer, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   PlayCircleFilled,
@@ -335,6 +335,13 @@ export default function Home() {
       clearInterval();
     }
   }, 200);
+
+  useEffect(() => {
+    if (state.hasToken) {
+      console.log('validating token');
+      (primus as any).write({ eventName: 'validateToken' });
+    }
+  }, [state]);
 
   return (
     <Container data-tid="container">
@@ -683,15 +690,6 @@ export default function Home() {
                   }}
                 >
                   Stop
-                </Button>
-                <Button
-                  size="large"
-                  icon={<RedoOutlined />}
-                  onClick={() => {
-                    (primus as any).write({ eventName: 'resetVotes' });
-                  }}
-                >
-                  Reset Votes
                 </Button>
                 <Button
                   size="large"
