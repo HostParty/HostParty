@@ -1,4 +1,3 @@
-const os = require('os');
 const path = require('path');
 const http = require('http');
 
@@ -9,8 +8,6 @@ const axios = require('axios');
 const Primus = require('primus');
 const express = require('express');
 const keytar = require('keytar');
-
-const { username } = os.userInfo();
 
 const low = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
@@ -87,7 +84,7 @@ const validateToken = debounce(token => {
     .then(result => {
       return result.data;
     })
-    .catch(error => {
+    .catch(() => {
       primus.write({
         eventName: 'error',
         payload: 'Could not validate Twitch OAuth token.'
@@ -256,7 +253,7 @@ function stopHostParty() {
 
 function createMessageHandler() {
   if (!messageHandler) {
-    messageHandler = (channel, userstate, message, self) => {
+    messageHandler = (channel, userstate, message) => {
       console.log('Message: ', message);
       // check if is next or stay
       if (
@@ -330,7 +327,7 @@ function createMessageHandler() {
   }
 }
 
-async function startServers(serverConfig) {
+async function startServers() {
   const app = express();
   app.use(express.static(path.join(__dirname, '/static')));
 

@@ -1,11 +1,9 @@
 /* eslint-disable jsx-a11y/label-has-associated-control */
 import React, { useState, useReducer, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import {
   PlayCircleFilled,
   StopFilled,
   StepForwardFilled,
-  RedoOutlined,
   LogoutOutlined
 } from '@ant-design/icons';
 import {
@@ -13,7 +11,6 @@ import {
   Input,
   Card,
   Switch,
-  Form,
   Slider,
   Checkbox,
   notification
@@ -21,8 +18,6 @@ import {
 import styled from 'styled-components';
 import ButtonGroup from 'antd/lib/button/button-group';
 import { useInterval } from 'beautiful-react-hooks';
-
-import routes from '../constants/routes.json';
 
 const commands = [
   {
@@ -69,7 +64,7 @@ const Container = styled.div`
   padding: 0 12px;
 `;
 
-const StyledLogoWrapper = styled.div`
+const StyledLogoWrapper = styled.div<{ setupFinished: boolean }>`
   transition: height 1s, width 1s;
   position: relative;
   width: 100%;
@@ -101,7 +96,7 @@ const HeaderRow = styled.div`
   overflow-x: hidden;
 `;
 
-const Title = styled.h2`
+const Title = styled.h2<{ setupFinished: boolean }>`
   transition: padding 1000ms;
   position: absolute;
   top: 18px;
@@ -115,7 +110,7 @@ const Title = styled.h2`
   text-align: left;
 `;
 
-const LoginForm = styled.div`
+const LoginForm = styled.div<{ setupFinished: boolean }>`
   transition: opacity 1s, height 1s;
   text-align: center;
 
@@ -147,7 +142,7 @@ const LoginForm = styled.div`
   }
 `;
 
-const AdminForm = styled.div`
+const AdminForm = styled.div<{ setupFinished: boolean }>`
   transition: opacity 1s, height 1s;
   text-align: center;
   display: flex;
@@ -211,7 +206,7 @@ const ControlWrapper = styled.div`
   position: relative;
 `;
 
-const StartButton = styled(Button)`
+const StartButton = styled(Button)<{ isPartying: boolean }>`
   transition: opacity 300ms;
   position: absolute;
   top: 0;
@@ -232,7 +227,7 @@ const StartButton = styled(Button)`
   }}
 `;
 
-const CustomButtonGroup = styled(ButtonGroup)`
+const CustomButtonGroup = styled(ButtonGroup)<{ isPartying: boolean }>`
   transition: opacity 300ms, transform 300ms;
   z-index: 1;
   ${(props: any) => {
@@ -251,7 +246,7 @@ const CustomButtonGroup = styled(ButtonGroup)`
   }}
 `;
 
-const LogoutButton = styled(Button)`
+const LogoutButton = styled(Button)<{ setupFinished: boolean }>`
   transition: opacity 1000ms, transform 1000ms;
   position: absolute;
   top: 26px;
@@ -292,7 +287,7 @@ const initialState = {
 
 export default function Home() {
   const [setupFinished, setSetupFinished] = useState(false);
-  const [oauthToken, setOauthToken] = useState('');
+  console.log({ setupFinished });
 
   const [state, setState] = useReducer((_state: any, newState: any) => {
     return {
@@ -335,6 +330,7 @@ export default function Home() {
       clearInterval();
     }
   }, 200);
+  console.log({ isCleared });
 
   useEffect(() => {
     if (state.hasToken) {
@@ -437,7 +433,7 @@ export default function Home() {
           <LoginButtonWrapper>
             <LoginButton
               type="primary"
-              onClick={(event: any) => {
+              onClick={() => {
                 // todo validate inputs
                 setState({
                   hasToken: true
@@ -455,7 +451,7 @@ export default function Home() {
           <Card title="Commands">
             <div className="ant-form-item">
               <div className="ant-form-item-label">
-                <label className="label" title="Input" htmlFor="message-types">
+                <label className="label" title="Input">
                   Command Message Types
                 </label>
               </div>
@@ -463,7 +459,6 @@ export default function Home() {
                 <div className="ant-form-item-control-input">
                   <div className="ant-form-item-control-input-content">
                     <CheckboxGroup
-                      id="message-types"
                       options={messageTypes}
                       value={state.selectedMessageTypes}
                       onChange={(selectedMessageTypes: any[]) => {
@@ -491,7 +486,7 @@ export default function Home() {
                 <Switch
                   checked={state[`${command.value}CommandEnabled`]}
                   defaultChecked
-                  onChange={(value: any) => {
+                  onChange={() => {
                     setState({
                       [`${command.value}CommandEnabled`]: !state[
                         `${command.value}CommandEnabled`
