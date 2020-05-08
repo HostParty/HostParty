@@ -1,10 +1,11 @@
 /* eslint-disable jsx-a11y/label-has-associated-control */
-import React, { useState, useReducer, useEffect } from 'react';
+import React, { useState, useReducer, useEffect, useRef } from 'react';
 import {
   PlayCircleFilled,
   StopFilled,
   StepForwardFilled,
-  LogoutOutlined
+  LogoutOutlined,
+  CopyOutlined
 } from '@ant-design/icons';
 import {
   Button,
@@ -18,6 +19,8 @@ import {
 import styled from 'styled-components';
 import ButtonGroup from 'antd/lib/button/button-group';
 import { useInterval } from 'beautiful-react-hooks';
+
+import MagicGrid from 'react-magic-grid';
 
 const commands = [
   {
@@ -59,7 +62,9 @@ const timers = [
 
 const messageTypes = ['chat', 'action', 'whisper'];
 
-const { Group: CheckboxGroup } = Checkbox;
+const { Group } = Checkbox;
+const CheckboxGroup = styled(Group)``;
+
 const Container = styled.div`
   padding: 0 12px;
 `;
@@ -145,13 +150,8 @@ const LoginForm = styled.div<{ setupFinished: boolean }>`
 const AdminForm = styled.div<{ setupFinished: boolean }>`
   transition: opacity 1s, height 1s;
   text-align: center;
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  justify-content: center;
   width: 100%;
   overflow: hidden;
-
   text-align: left;
   margin-left: auto;
   margin-right: auto;
@@ -180,10 +180,32 @@ const AdminCardWrapper = styled.div`
   }
 `;
 
-const InputRow = styled.div`
+const CommandsCard = styled(Card)`
+  .ant-form-item {
+    text-align: center;
+  }
+  .ant-form-item-control-input-content {
+    display: flex;
+    justify-content: center;
+  }
+`;
+
+const CommandRows = styled.div`
   display: flex;
   flex-direction: row;
-  align-items: center;
+  flex-wrap: wrap;
+`;
+
+const CommandInputRow = styled.div`
+  width: 50%;
+  padding: 10px;
+`;
+
+const CommandLabelRow = styled.div`
+  margin-bottom: 10px;
+  label {
+    margin-right: 10px;
+  }
 `;
 
 const LoginButtonWrapper = styled.div`
@@ -196,9 +218,26 @@ const LoginButton = styled(Button)`
   text-align: center;
 `;
 
+const CustomSliderWrapper = styled.div`
+  width: 50%;
+  padding-right: 12px;
+
+  &:nth-child(2n) {
+    padding-right: 0;
+    padding-left: 12px;
+  }
+`;
+
+const SliderColumns = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  flex-direction: row;
+`;
+
 const CustomSlider = styled(Slider)`
   width: 100%;
   margin-bottom: 20px;
+  margin-top: 16px;
 `;
 
 const ControlWrapper = styled.div`
@@ -286,6 +325,8 @@ const initialState = {
 };
 
 export default function Home() {
+  const overlaySnippetRef = useRef(null);
+
   const [setupFinished, setSetupFinished] = useState(false);
   console.log({ setupFinished });
 
@@ -338,6 +379,29 @@ export default function Home() {
       (primus as any).write({ eventName: 'validateToken' });
     }
   }, [state]);
+
+  const copyUrlButton = (
+    <Button
+      title="Copy"
+      type="link"
+      onClick={event => {
+        try {
+          const element = overlaySnippetRef || {};
+          if (element.current) {
+            (element as any).current.select();
+            window.document.execCommand('copy');
+            notification.info({
+              message: 'URL Copied!'
+            });
+          }
+        } catch (e) {
+          console.log('Could not copy to clipboard.', e);
+        }
+      }}
+    >
+      <CopyOutlined />
+    </Button>
+  );
 
   return (
     <Container data-tid="container">
@@ -447,232 +511,233 @@ export default function Home() {
         </div>
       </LoginForm>
       <AdminForm setupFinished={state.hasToken}>
-        <AdminCardWrapper>
-          <Card title="Commands">
-            <div className="ant-form-item">
-              <div className="ant-form-item-label">
-                <label className="label" title="Input">
-                  Command Message Types
-                </label>
+        <MagicGrid static maxColumns={3} animate>
+          <AdminCardWrapper>
+            <Card title="Overlay URL">
+              <Input
+                ref={overlaySnippetRef}
+                value="http://localhost:4242"
+                addonAfter={copyUrlButton}
+              />
+            </Card>
+          </AdminCardWrapper>
+          <AdminCardWrapper>
+            <CommandsCard title="Commands">
+              <div className="ant-form-item">
+                <div className="ant-form-item-label">
+                  <label className="label" title="Input">
+                    Command Message Types
+                  </label>
+                </div>
+                <div className=" ant-form-item-control">
+                  <div className="ant-form-item-control-input">
+                    <div className="ant-form-item-control-input-content">
+                      <CheckboxGroup
+                        options={messageTypes}
+                        value={state.selectedMessageTypes}
+                        onChange={(selectedMessageTypes: any[]) => {
+                          setState({
+                            selectedMessageTypes
+                          });
+                          if (primus) {
+                            (primus as any).write({
+                              eventName: 'configChange',
+                              payload: {
+                                ...state,
+                                selectedMessageTypes
+                              }
+                            });
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className=" ant-form-item-control">
-                <div className="ant-form-item-control-input">
-                  <div className="ant-form-item-control-input-content">
-                    <CheckboxGroup
-                      options={messageTypes}
-                      value={state.selectedMessageTypes}
-                      onChange={(selectedMessageTypes: any[]) => {
+
+              <CommandRows>
+                {commands.map((command: any) => (
+                  <CommandInputRow key={command.value}>
+                    <CommandLabelRow>
+                      <label>{`${command.label} Command`}</label>
+                      <Switch
+                        size="small"
+                        checked={state[`${command.value}CommandEnabled`]}
+                        defaultChecked
+                        onChange={() => {
+                          setState({
+                            [`${command.value}CommandEnabled`]: !state[
+                              `${command.value}CommandEnabled`
+                            ]
+                          });
+                          if (primus) {
+                            (primus as any).write({
+                              eventName: 'configChange',
+                              payload: {
+                                ...state,
+                                [`${command.value}CommandEnabled`]: !state[
+                                  `${command.value}CommandEnabled`
+                                ]
+                              }
+                            });
+                          }
+                        }}
+                      />
+                    </CommandLabelRow>
+                    <Input
+                      value={state[`${command.value}Command`]}
+                      onChange={(event: any) => {
                         setState({
-                          selectedMessageTypes
+                          [`${command.value}Command`]: event.target.value
                         });
                         if (primus) {
                           (primus as any).write({
                             eventName: 'configChange',
                             payload: {
                               ...state,
-                              selectedMessageTypes
+                              [`${command.value}Command`]: event.target.value
                             }
                           });
                         }
                       }}
+                      disabled={!state[`${command.value}CommandEnabled`]}
                     />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {commands.map((command: any) => (
-              <InputRow key={command.value}>
-                <Switch
-                  checked={state[`${command.value}CommandEnabled`]}
-                  defaultChecked
-                  onChange={() => {
-                    setState({
-                      [`${command.value}CommandEnabled`]: !state[
-                        `${command.value}CommandEnabled`
-                      ]
-                    });
-                    if (primus) {
-                      (primus as any).write({
-                        eventName: 'configChange',
-                        payload: {
-                          ...state,
-                          [`${command.value}CommandEnabled`]: !state[
-                            `${command.value}CommandEnabled`
-                          ]
-                        }
-                      });
-                    }
-                  }}
-                />
-                <Input
-                  addonBefore={`${command.label} Command`}
-                  value={state[`${command.value}Command`]}
-                  onChange={(event: any) => {
-                    setState({
-                      [`${command.value}Command`]: event.target.value
-                    });
-                    if (primus) {
-                      (primus as any).write({
-                        eventName: 'configChange',
-                        payload: {
-                          ...state,
-                          [`${command.value}Command`]: event.target.value
-                        }
-                      });
-                    }
-                  }}
-                  disabled={!state[`${command.value}CommandEnabled`]}
-                />
-              </InputRow>
-            ))}
-          </Card>
-        </AdminCardWrapper>
-        <AdminCardWrapper>
-          <Card title="Timers">
-            {timers.map(timer => (
-              <div key={timer.key} className="ant-row ant-form-item">
+                  </CommandInputRow>
+                ))}
+              </CommandRows>
+            </CommandsCard>
+          </AdminCardWrapper>
+          <AdminCardWrapper>
+            <Card title="Timers">
+              <SliderColumns>
+                {timers.map(timer => (
+                  <CustomSliderWrapper key={timer.key}>
+                    <div>
+                      <label
+                        className="label"
+                        title="Input"
+                        htmlFor={`${timer.key}-timeout`}
+                      >
+                        {timer.label}
+                      </label>
+                    </div>
+                    <div>
+                      <div className="ant-form-item-control-input">
+                        <div className="ant-form-item-control-input-content">
+                          <CustomSlider
+                            id={`${timer.key}-timeout`}
+                            min={5000}
+                            max={120000}
+                            step={1000}
+                            value={state[timer.key]}
+                            onChange={(value: any) => {
+                              setState({ [timer.key]: value });
+                              if (primus) {
+                                (primus as any).write({
+                                  eventName: 'configChange',
+                                  payload: {
+                                    ...state,
+                                    [timer.key]: value
+                                  }
+                                });
+                              }
+                            }}
+                            tipFormatter={() => `${state[timer.key] / 1000}s`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </CustomSliderWrapper>
+                ))}
+              </SliderColumns>
+            </Card>
+          </AdminCardWrapper>
+          <AdminCardWrapper>
+            <Card title="Channel Details">
+              <div className="ant-row ant-form-item">
                 <div className="ant-col ant-col-8 ant-form-item-label">
                   <label
                     className="label"
                     title="Input"
-                    htmlFor={`${timer.key}-timeout`}
+                    htmlFor="party-channel"
                   >
-                    {timer.label}
+                    Party Channel
                   </label>
                 </div>
                 <div className="ant-col ant-col-16 ant-form-item-control">
                   <div className="ant-form-item-control-input">
                     <div className="ant-form-item-control-input-content">
-                      <CustomSlider
-                        id={`${timer.key}-timeout`}
-                        min={5000}
-                        max={120000}
-                        step={1000}
-                        value={state[timer.key]}
-                        tooltipVisible={state.hasToken}
-                        onChange={(value: any) => {
-                          setState({ [timer.key]: value });
+                      <Input
+                        id="party-channel"
+                        name="party-channel"
+                        value={state.partyChannel}
+                        onChange={(event: any) => {
+                          setState({ partyChannel: event.target.value });
+
                           if (primus) {
                             (primus as any).write({
                               eventName: 'configChange',
                               payload: {
                                 ...state,
-                                [timer.key]: value
+                                partyChannel: event.target.value
                               }
                             });
                           }
                         }}
-                        tipFormatter={() => `${state[timer.key] / 1000}s`}
                       />
                     </div>
                   </div>
                 </div>
               </div>
-            ))}
-          </Card>
-        </AdminCardWrapper>
-        <AdminCardWrapper>
-          <Card title="Channel Details">
-            <div className="ant-row ant-form-item">
-              <div className="ant-col ant-col-8 ant-form-item-label">
-                <label className="label" title="Input" htmlFor="party-channel">
-                  Party Channel
-                </label>
-              </div>
-              <div className="ant-col ant-col-16 ant-form-item-control">
-                <div className="ant-form-item-control-input">
-                  <div className="ant-form-item-control-input-content">
-                    <Input
-                      id="party-channel"
-                      name="party-channel"
-                      value={state.partyChannel}
-                      onChange={(event: any) => {
-                        setState({ partyChannel: event.target.value });
 
-                        if (primus) {
-                          (primus as any).write({
-                            eventName: 'configChange',
-                            payload: {
-                              ...state,
-                              partyChannel: event.target.value
-                            }
-                          });
-                        }
-                      }}
-                    />
+              <div className="ant-row ant-form-item">
+                <div className="ant-col ant-col-8 ant-form-item-label">
+                  <label
+                    className="label"
+                    title="Input"
+                    htmlFor="title-keyword"
+                  >
+                    Title Keyword
+                  </label>
+                </div>
+                <div className="ant-col ant-col-16 ant-form-item-control">
+                  <div className="ant-form-item-control-input">
+                    <div className="ant-form-item-control-input-content">
+                      <Input
+                        id="title-keyword"
+                        name="title-keyword"
+                        value={state.titleKeyword}
+                        onChange={(event: any) => {
+                          setState({ titleKeyword: event.target.value });
+
+                          if (primus) {
+                            (primus as any).write({
+                              eventName: 'configChange',
+                              payload: {
+                                ...state,
+                                titleKeyword: event.target.value
+                              }
+                            });
+                          }
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </Card>
+          </AdminCardWrapper>
 
-            <div className="ant-row ant-form-item">
-              <div className="ant-col ant-col-8 ant-form-item-label">
-                <label className="label" title="Input" htmlFor="title-keyword">
-                  Title Keyword
-                </label>
-              </div>
-              <div className="ant-col ant-col-16 ant-form-item-control">
-                <div className="ant-form-item-control-input">
-                  <div className="ant-form-item-control-input-content">
-                    <Input
-                      id="title-keyword"
-                      name="title-keyword"
-                      value={state.titleKeyword}
-                      onChange={(event: any) => {
-                        setState({ titleKeyword: event.target.value });
-
-                        if (primus) {
-                          (primus as any).write({
-                            eventName: 'configChange',
-                            payload: {
-                              ...state,
-                              titleKeyword: event.target.value
-                            }
-                          });
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </Card>
-        </AdminCardWrapper>
-
-        <AdminCardWrapper>
-          <Card title="Controls">
-            <ControlWrapper>
-              <StartButton
-                type="primary"
-                size="large"
-                icon={<PlayCircleFilled />}
-                onClick={() => {
-                  setState({ isPartying: !state.isPartying });
-                  (primus as any).write({ eventName: 'startHostParty' });
-                  if (primus) {
-                    (primus as any).write({
-                      eventName: 'configChange',
-                      payload: {
-                        ...state,
-                        isPartying: !state.isPartying
-                      }
-                    });
-                  }
-                }}
-                isPartying={state.isPartying}
-              >
-                Start
-              </StartButton>
-              <CustomButtonGroup isPartying={state.isPartying}>
-                <Button
+          <AdminCardWrapper>
+            <Card title="Controls">
+              <ControlWrapper>
+                <StartButton
                   type="primary"
                   size="large"
-                  icon={<StopFilled />}
-                  danger
+                  icon={<PlayCircleFilled />}
                   onClick={() => {
                     setState({ isPartying: !state.isPartying });
-                    (primus as any).write({ eventName: 'stopHostParty' });
+                    (primus as any).write({ eventName: 'startHostParty' });
                     if (primus) {
                       (primus as any).write({
                         eventName: 'configChange',
@@ -683,22 +748,46 @@ export default function Home() {
                       });
                     }
                   }}
+                  isPartying={state.isPartying}
                 >
-                  Stop
-                </Button>
-                <Button
-                  size="large"
-                  icon={<StepForwardFilled />}
-                  onClick={() => {
-                    (primus as any).write({ eventName: 'nextStream' });
-                  }}
-                >
-                  Next Stream
-                </Button>
-              </CustomButtonGroup>
-            </ControlWrapper>
-          </Card>
-        </AdminCardWrapper>
+                  Start
+                </StartButton>
+                <CustomButtonGroup isPartying={state.isPartying}>
+                  <Button
+                    type="primary"
+                    size="large"
+                    icon={<StopFilled />}
+                    danger
+                    onClick={() => {
+                      setState({ isPartying: !state.isPartying });
+                      (primus as any).write({ eventName: 'stopHostParty' });
+                      if (primus) {
+                        (primus as any).write({
+                          eventName: 'configChange',
+                          payload: {
+                            ...state,
+                            isPartying: !state.isPartying
+                          }
+                        });
+                      }
+                    }}
+                  >
+                    Stop
+                  </Button>
+                  <Button
+                    size="large"
+                    icon={<StepForwardFilled />}
+                    onClick={() => {
+                      (primus as any).write({ eventName: 'nextStream' });
+                    }}
+                  >
+                    Next Stream
+                  </Button>
+                </CustomButtonGroup>
+              </ControlWrapper>
+            </Card>
+          </AdminCardWrapper>
+        </MagicGrid>
       </AdminForm>
     </Container>
   );
