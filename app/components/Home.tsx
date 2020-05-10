@@ -305,6 +305,24 @@ const LogoutButton = styled(Button)<{ setupFinished: boolean }>`
   }}
 `;
 
+const StatusRow = styled.div`
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  text-align: center;
+  align-items: flex-end;
+  margin-top: 32px;
+`;
+
+const StatusCell = styled.div`
+  width: 33%;
+
+  div {
+    font-weight: 600;
+    font-size: 32px;
+  }
+`;
+
 const initialState = {
   partyChannel: '',
   nextCommand: '!next',
@@ -337,10 +355,18 @@ export default function Home() {
     };
   }, initialState);
 
+  const [status, setStatus] = useReducer((_state: any, newState: any) => {
+    return {
+      ..._state,
+      ...newState
+    };
+  }, initialState);
+
+  const [currentStreamStart, setCurrentStreamStart] = useState(Date.now());
+
   const [primus, setPrimus] = useState(null);
 
-  const [isCleared, clearInterval] = useInterval(() => {
-    console.log('Primus?', (window as any).Primus);
+  const [isPrimusIntervalCleared, clearPrimusInterval] = useInterval(() => {
     if ((window as any).Primus) {
       const primusInstance = new (window as any).Primus(
         'http://localhost:4242'
@@ -348,12 +374,25 @@ export default function Home() {
 
       primusInstance.on('data', (data: any) => {
         const { eventName, payload } = data;
-        console.log('primus on data', { data });
         if (
           eventName === 'initialConfig' ||
           eventName === 'requestConfigResponse'
         ) {
           setState(payload);
+        } else if (eventName === 'durationChange') {
+          setStatus({
+            duration: payload
+          });
+        } else if (eventName === 'voteCountChange') {
+          setStatus({
+            voteCount: payload
+          });
+        } else if (eventName === 'availableStreamsChange') {
+          setStatus({
+            availableStreams: payload
+          });
+        } else if (data.eventName === 'changeStream') {
+          setCurrentStreamStart(data.currentStreamStart);
         } else if (eventName === 'error') {
           notification.error({
             message: 'Backend Error:',
@@ -368,14 +407,26 @@ export default function Home() {
         eventName: 'requestConfig'
       });
       setPrimus(primusInstance);
-      clearInterval();
+      clearPrimusInterval();
     }
   }, 200);
-  console.log({ isCleared });
+  console.log({ isPrimusIntervalCleared });
+
+  const [secondsRemaining, setSecondsRemaining] = useState(0);
+
+  const [isTimeLeftCleared, clearTimeLeftInterval] = useInterval(() => {
+    const timeRemaining = currentStreamStart - Date.now() + status.duration;
+    let newSecondsRemaining = Math.floor(timeRemaining / 1000);
+    // eslint-disable-next-line no-restricted-globals
+    if (isNaN(newSecondsRemaining)) {
+      newSecondsRemaining = 0;
+    }
+    setSecondsRemaining(newSecondsRemaining);
+  }, 1000);
+  console.log({ isTimeLeftCleared, clearTimeLeftInterval });
 
   useEffect(() => {
     if (state.hasToken) {
-      console.log('validating token');
       (primus as any).write({ eventName: 'validateToken' });
     }
   }, [state]);
@@ -785,6 +836,23 @@ export default function Home() {
                   </Button>
                 </CustomButtonGroup>
               </ControlWrapper>
+
+              <StatusRow>
+                <StatusCell>
+                  <label>Available Streams</label>
+                  <div>{status.availableStreams || '--'}</div>
+                </StatusCell>
+                <StatusCell>
+                  <label>Time Remaining</label>
+                  {state.isPartying && <div>{`${secondsRemaining}s`}</div>}
+                  {!state.isPartying && <div> -- </div>}
+                </StatusCell>
+                <StatusCell>
+                  <label>Vote Count</label>
+                  {state.isPartying && <div>{status.voteCount || '--'}</div>}
+                  {!state.isPartying && <div> -- </div>}
+                </StatusCell>
+              </StatusRow>
             </Card>
           </AdminCardWrapper>
         </MagicGrid>

@@ -24,7 +24,8 @@ const defaultState = {
   changeStreamTimeout: 30000,
   isPartying: false,
   currentStreamStart: Date.now(),
-  currentStreamDurationMs: 30000
+  currentStreamDurationMs: 30000,
+  voteCount: 0
 };
 
 let config = {
@@ -144,6 +145,12 @@ function fetchStreams() {
         .map(stream => {
           return stream.channel.name;
         });
+
+      primus.write({
+        eventName: 'availableStreamsChange',
+        payload: state.streams.length
+      });
+
       return state.streams;
     })
     .catch(e => {
@@ -174,7 +181,8 @@ function changeStream() {
     streams: state.streams,
     currentStream: newStream,
     currentStreamStart: Date.now(),
-    currentStreamDurationMs: config.currentStreamInitialDurationMs
+    currentStreamDurationMs: config.currentStreamInitialDurationMs,
+    voteCount: 0
   };
 
   primus.write({
@@ -185,6 +193,10 @@ function changeStream() {
   primus.write({
     eventName: 'durationChange',
     payload: config.currentStreamInitialDurationMs
+  });
+  primus.write({
+    eventName: 'voteCountChange',
+    payload: 0
   });
 }
 
@@ -303,6 +315,7 @@ function createMessageHandler() {
         if (
           !(state.nextCommandTimestamps[userId] && Date.now() < endOfTimeout)
         ) {
+          state.voteCount += 1;
           state.currentStreamDurationMs -= config.nextCommandDurationChangeMs;
           state.nextCommandTimestamps[userId] = Date.now();
         }
@@ -314,6 +327,7 @@ function createMessageHandler() {
         if (
           !(state.stayCommandTimestamps[userId] && Date.now() < endOfTimeout)
         ) {
+          state.voteCount += 1;
           state.currentStreamDurationMs += config.stayCommandDurationChangeMs;
           state.stayCommandTimestamps[userId] = Date.now();
         }
@@ -322,6 +336,11 @@ function createMessageHandler() {
       primus.write({
         eventName: 'durationChange',
         payload: state.currentStreamDurationMs
+      });
+
+      primus.write({
+        eventName: 'voteCountChange',
+        payload: state.voteCount
       });
     };
   }
