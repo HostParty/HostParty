@@ -93,33 +93,31 @@
           request(expressAppUrl, (error, response, body) => {
             if (!error && response.statusCode == 200) {
               clearInterval(checkServerRunning);
+
+              setTimeout(() => {
+                const script = document.createElement('script');
+                script.src = 'http://localhost:4242/primus/primus.js';
+                document.head.appendChild(script);
+              }, 2000);
+
+              const primusInterval = setInterval(() => {
+                console.log('Primus?', window.Primus);
+                if (window.Primus) {
+                  const primusInstance = new window.Primus(
+                    'http://localhost:4242'
+                  );
+
+                  primusInstance.write({
+                    eventName: 'appUserDataPath',
+                    payload: app.getPath('userData')
+                  });
+                  clearInterval(primusInterval);
+                }
+              }, 200);
             }
           });
         }, 1000);
       }
-    </script>
-
-    <script>
-      const { app } = require('electron').remote;
-
-      setTimeout(() => {
-        const script = document.createElement('script');
-        script.src = 'http://localhost:4242/primus/primus.js';
-        document.head.appendChild(script);
-      }, 2000);
-
-      const primusInterval = setInterval(() => {
-        console.log('Primus?', window.Primus);
-        if (window.Primus) {
-          const primusInstance = new window.Primus('http://localhost:4242');
-
-          primusInstance.write({
-            eventName: 'appUserDataPath',
-            payload: app.getPath('userData')
-          });
-          clearInterval(primusInterval);
-        }
-      }, 200);
     </script>
   </body>
 </html>
