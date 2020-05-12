@@ -48,10 +48,18 @@ a {
   text-decoration: none;
 }
 
+.ant-card-extra a {
+  color: #096dd9;
+}
+
 a:hover {
   opacity: 1;
   text-decoration: none;
   cursor: pointer;
+}
+
+.ant-card-extra a:active {
+  color: #1890ff;
 }
 
 .ant-input-group-addon:first-child {

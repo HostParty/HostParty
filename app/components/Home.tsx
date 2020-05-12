@@ -5,7 +5,10 @@ import {
   StopFilled,
   StepForwardFilled,
   LogoutOutlined,
-  CopyOutlined
+  CopyOutlined,
+  EyeInvisibleOutlined,
+  EyeOutlined,
+  DeleteOutlined
 } from '@ant-design/icons';
 import {
   Button,
@@ -14,13 +17,17 @@ import {
   Switch,
   Slider,
   Checkbox,
-  notification
+  notification,
+  List
 } from 'antd';
+
 import styled from 'styled-components';
-import ButtonGroup from 'antd/lib/button/button-group';
 import { useInterval } from 'beautiful-react-hooks';
 
 import MagicGrid from 'react-magic-grid';
+
+const { Group: ButtonGroup } = Button;
+const { Search } = Input;
 
 const commands = [
   {
@@ -323,6 +330,40 @@ const StatusCell = styled.div`
   }
 `;
 
+const StreamFilters = styled(Card)``;
+
+const FilteredStreamsCard = styled(Card)`
+  .ant-card-body {
+    padding: 10px 0 0;
+  }
+  .ant-spin-container {
+    height: 200px;
+    overflow-y: auto;
+  }
+`;
+
+const StreamFiltersListTypeWrapper = styled.div`
+  display: flex;
+  flex-direction: row;
+  justify-content: space-evenly;
+
+  & > span {
+    width: 33%;
+    text-align: center;
+    line-height: 42px;
+
+    .anticon {
+      font-size: 42px;
+      line-height: 42px;
+    }
+  }
+`;
+
+const FilterTypeDescription = styled.p`
+  font-size: 16px;
+  padding: 0 16px;
+`;
+
 const initialState = {
   partyChannel: '',
   nextCommand: '!next',
@@ -339,7 +380,9 @@ const initialState = {
   isPartying: false,
   currentStreamInitialDurationMs: 30000,
   nextCommandDurationChangeMs: 5000,
-  stayCommandDurationChangeMs: 5000
+  stayCommandDurationChangeMs: 5000,
+  filteredStreams: [],
+  shouldFilterOutStreams: true
 };
 
 export default function Home() {
@@ -363,6 +406,7 @@ export default function Home() {
   }, initialState);
 
   const [currentStreamStart, setCurrentStreamStart] = useState(Date.now());
+  const [filteredStreamInputText, setFilteredStreamInputText] = useState('');
 
   const [primus, setPrimus] = useState(null);
 
@@ -432,9 +476,11 @@ export default function Home() {
   }, [state]);
 
   const copyUrlButton = (
-    <Button
+    <a
+      className="ant-btn ant-btn-link"
       title="Copy"
       type="link"
+      href="http://localhost:4242"
       onClick={event => {
         try {
           const element = overlaySnippetRef || {};
@@ -451,7 +497,7 @@ export default function Home() {
       }}
     >
       <CopyOutlined />
-    </Button>
+    </a>
   );
 
   return (
@@ -564,14 +610,241 @@ export default function Home() {
       <AdminForm setupFinished={state.hasToken}>
         <MagicGrid static maxColumns={3} animate>
           <AdminCardWrapper>
-            <Card title="Overlay URL">
-              <Input
-                ref={overlaySnippetRef}
-                value="http://localhost:4242"
-                addonAfter={copyUrlButton}
-              />
+            <Card title="Channel Details">
+              <div className="ant-row ant-form-item">
+                <div className="ant-col ant-col-8 ant-form-item-label">
+                  <label
+                    className="label"
+                    title="Input"
+                    htmlFor="party-channel"
+                  >
+                    Party Channel
+                  </label>
+                </div>
+                <div className="ant-col ant-col-16 ant-form-item-control">
+                  <div className="ant-form-item-control-input">
+                    <div className="ant-form-item-control-input-content">
+                      <Input
+                        id="party-channel"
+                        name="party-channel"
+                        value={state.partyChannel}
+                        onChange={(event: any) => {
+                          setState({ partyChannel: event.target.value });
+
+                          if (primus) {
+                            (primus as any).write({
+                              eventName: 'configChange',
+                              payload: {
+                                ...state,
+                                partyChannel: event.target.value
+                              }
+                            });
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="ant-row ant-form-item">
+                <div className="ant-col ant-col-8 ant-form-item-label">
+                  <label
+                    className="label"
+                    title="Input"
+                    htmlFor="title-keyword"
+                  >
+                    Title Keyword
+                  </label>
+                </div>
+                <div className="ant-col ant-col-16 ant-form-item-control">
+                  <div className="ant-form-item-control-input">
+                    <div className="ant-form-item-control-input-content">
+                      <Input
+                        id="title-keyword"
+                        name="title-keyword"
+                        value={state.titleKeyword}
+                        onChange={(event: any) => {
+                          setState({ titleKeyword: event.target.value });
+
+                          if (primus) {
+                            (primus as any).write({
+                              eventName: 'configChange',
+                              payload: {
+                                ...state,
+                                titleKeyword: event.target.value
+                              }
+                            });
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </Card>
           </AdminCardWrapper>
+
+          <AdminCardWrapper>
+            <Card title="Stream Filtering">
+              <FilteredStreamsCard
+                type="inner"
+                title="Streams"
+                extra={
+                  // eslint-disable-next-line react/jsx-wrap-multilines
+                  <Button
+                    type="link"
+                    onClick={() => {
+                      const newFilteredStreams: any[] = [];
+                      setState({
+                        filteredStreams: newFilteredStreams
+                      });
+
+                      if (primus) {
+                        (primus as any).write({
+                          eventName: 'configChange',
+                          payload: {
+                            ...state,
+                            filteredStreams: newFilteredStreams
+                          }
+                        });
+                      }
+                    }}
+                  >
+                    Delete All
+                  </Button>
+                }
+              >
+                <StreamFiltersListTypeWrapper>
+                  <span>
+                    <EyeInvisibleOutlined />
+                  </span>
+                  <span>
+                    <Switch
+                      defaultChecked={!state.shouldFilterOutStreams}
+                      onChange={checked => {
+                        setState({ shouldFilterOutStreams: checked });
+
+                        if (primus) {
+                          (primus as any).write({
+                            eventName: 'configChange',
+                            payload: {
+                              ...state,
+                              shouldFilterOutStreams: checked
+                            }
+                          });
+                        }
+                      }}
+                    />
+                  </span>
+                  <span>
+                    <EyeOutlined />
+                  </span>
+                </StreamFiltersListTypeWrapper>
+                {state.shouldFilterOutStreams && (
+                  <FilterTypeDescription>
+                    Users in the list will be IGNORED from the party.
+                  </FilterTypeDescription>
+                )}
+                {!state.shouldFilterOutStreams && (
+                  <FilterTypeDescription>
+                    ONLY Users in the list will be shown to the party.
+                  </FilterTypeDescription>
+                )}
+                <div>
+                  <Search
+                    enterButton="Add"
+                    size="large"
+                    value={filteredStreamInputText}
+                    onChange={
+                      change => setFilteredStreamInputText(change.target.value)
+                      // eslint-disable-next-line react/jsx-curly-newline
+                    }
+                    onSearch={streamName => {
+                      if (streamName === '') {
+                        notification.error({
+                          message: 'Invalid Stream:',
+                          description: "Stream name can't be empty."
+                        });
+                      } else if (
+                        state.filteredStreams.findIndex(
+                          (stream: string) =>
+                            stream.toLowerCase() === streamName.toLowerCase()
+                        ) === -1
+                      ) {
+                        setState({
+                          filteredStreams: [
+                            ...state.filteredStreams,
+                            streamName
+                          ]
+                        });
+
+                        setFilteredStreamInputText('');
+
+                        if (primus) {
+                          (primus as any).write({
+                            eventName: 'configChange',
+                            payload: {
+                              ...state,
+                              filteredStreams: [
+                                ...state.filteredStreams,
+                                streamName
+                              ]
+                            }
+                          });
+                        }
+                      } else {
+                        notification.error({
+                          message: 'Duplicate Stream:',
+                          description: 'That stream exists in the list already.'
+                        });
+                      }
+                    }}
+                  />
+                </div>
+                <List
+                  bordered
+                  itemLayout="horizontal"
+                  locale={{ emptyText: 'No Streamers in list yet.' }}
+                  dataSource={state.filteredStreams}
+                  renderItem={(stream: string) => (
+                    <List.Item
+                      key={stream}
+                      actions={[
+                        <Button
+                          key="delete"
+                          onClick={() => {
+                            const newFilteredStreams = state.filteredStreams.filter(
+                              (filteredStream: string) =>
+                                filteredStream !== stream
+                            );
+                            setState({
+                              filteredStreams: newFilteredStreams
+                            });
+
+                            if (primus) {
+                              (primus as any).write({
+                                eventName: 'configChange',
+                                payload: {
+                                  ...state,
+                                  filteredStreams: newFilteredStreams
+                                }
+                              });
+                            }
+                          }}
+                        >
+                          <DeleteOutlined />
+                        </Button>
+                      ]}
+                    >
+                      {stream}
+                    </List.Item>
+                  )}
+                />
+              </FilteredStreamsCard>
+            </Card>
+          </AdminCardWrapper>
+
           <AdminCardWrapper>
             <CommandsCard title="Commands">
               <div className="ant-form-item">
@@ -658,6 +931,16 @@ export default function Home() {
               </CommandRows>
             </CommandsCard>
           </AdminCardWrapper>
+
+          <AdminCardWrapper>
+            <Card title="Overlay URL">
+              <Input
+                ref={overlaySnippetRef}
+                value="http://localhost:4242"
+                addonAfter={copyUrlButton}
+              />
+            </Card>
+          </AdminCardWrapper>
           <AdminCardWrapper>
             <Card title="Timers">
               <SliderColumns>
@@ -701,81 +984,6 @@ export default function Home() {
                   </CustomSliderWrapper>
                 ))}
               </SliderColumns>
-            </Card>
-          </AdminCardWrapper>
-          <AdminCardWrapper>
-            <Card title="Channel Details">
-              <div className="ant-row ant-form-item">
-                <div className="ant-col ant-col-8 ant-form-item-label">
-                  <label
-                    className="label"
-                    title="Input"
-                    htmlFor="party-channel"
-                  >
-                    Party Channel
-                  </label>
-                </div>
-                <div className="ant-col ant-col-16 ant-form-item-control">
-                  <div className="ant-form-item-control-input">
-                    <div className="ant-form-item-control-input-content">
-                      <Input
-                        id="party-channel"
-                        name="party-channel"
-                        value={state.partyChannel}
-                        onChange={(event: any) => {
-                          setState({ partyChannel: event.target.value });
-
-                          if (primus) {
-                            (primus as any).write({
-                              eventName: 'configChange',
-                              payload: {
-                                ...state,
-                                partyChannel: event.target.value
-                              }
-                            });
-                          }
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="ant-row ant-form-item">
-                <div className="ant-col ant-col-8 ant-form-item-label">
-                  <label
-                    className="label"
-                    title="Input"
-                    htmlFor="title-keyword"
-                  >
-                    Title Keyword
-                  </label>
-                </div>
-                <div className="ant-col ant-col-16 ant-form-item-control">
-                  <div className="ant-form-item-control-input">
-                    <div className="ant-form-item-control-input-content">
-                      <Input
-                        id="title-keyword"
-                        name="title-keyword"
-                        value={state.titleKeyword}
-                        onChange={(event: any) => {
-                          setState({ titleKeyword: event.target.value });
-
-                          if (primus) {
-                            (primus as any).write({
-                              eventName: 'configChange',
-                              payload: {
-                                ...state,
-                                titleKeyword: event.target.value
-                              }
-                            });
-                          }
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
             </Card>
           </AdminCardWrapper>
 

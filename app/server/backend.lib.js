@@ -44,7 +44,9 @@ let config = {
   isPartying: false,
   currentStreamInitialDurationMs: 30000,
   nextCommandDurationChangeMs: 5000,
-  stayCommandDurationChangeMs: 5000
+  stayCommandDurationChangeMs: 5000,
+  filteredStreams: [],
+  shouldFilterOutStreams: true
 };
 
 let messageHandler;
@@ -145,6 +147,17 @@ function fetchStreams() {
         .map(stream => {
           return stream.channel.name;
         });
+
+      const lowercasedFilteredStreams = config.filteredStreams.map(stream =>
+        stream.toLowerCase()
+      );
+
+      state.streams = state.streams.filter(stream => {
+        if (config.shouldFilterOutStreams) {
+          return lowercasedFilteredStreams.indexOf(stream.toLowerCase()) === -1;
+        }
+        return lowercasedFilteredStreams.indexOf(stream.toLowerCase()) !== -1;
+      });
 
       primus.write({
         eventName: 'availableStreamsChange',
