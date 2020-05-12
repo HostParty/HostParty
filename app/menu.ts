@@ -20,12 +20,12 @@ export default class MenuBuilder {
   }
 
   buildMenu() {
-    if (
-      process.env.NODE_ENV === 'development' ||
-      process.env.DEBUG_PROD === 'true'
-    ) {
-      this.setupDevelopmentEnvironment();
-    }
+    // if (
+    //   process.env.NODE_ENV === 'development' ||
+    //   process.env.DEBUG_PROD === 'true'
+    // ) {
+    this.setupDevelopmentEnvironment();
+    // }
 
     const template =
       process.platform === 'darwin'
@@ -184,11 +184,11 @@ export default class MenuBuilder {
       ]
     };
 
-    const subMenuView =
-      process.env.NODE_ENV === 'development' ||
-      process.env.DEBUG_PROD === 'true'
-        ? subMenuViewDev
-        : subMenuViewProd;
+    const subMenuView = subMenuViewDev;
+    // process.env.NODE_ENV === 'development' ||
+    // process.env.DEBUG_PROD === 'true'
+    //   ? subMenuViewDev
+    //   : subMenuViewProd;
 
     return [subMenuAbout, subMenuEdit, subMenuView, subMenuWindow, subMenuHelp];
   }
@@ -215,7 +215,8 @@ export default class MenuBuilder {
         label: '&View',
         submenu:
           process.env.NODE_ENV === 'development' ||
-          process.env.DEBUG_PROD === 'true'
+          process.env.DEBUG_PROD === 'true' ||
+          true
             ? [
                 {
                   label: '&Reload',
