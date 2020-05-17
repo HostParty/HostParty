@@ -1,4 +1,20 @@
 const path = require('path');
+const winston = require('winston');
+
+const logger = winston.createLogger({
+  format: winston.format.json(),
+  transports: [
+    new winston.transports.File({
+      filename:
+        '/Users/cmgriffing/Library/Application Support/HostParty/backend.lib.log',
+      options: { flags: 'w' }
+    })
+  ]
+});
+
+process.on('uncaughtException', logger.info);
+process.on('unhandledRejection', logger.info);
+
 const http = require('http');
 
 const tmi = require('tmi.js');
@@ -11,6 +27,10 @@ const keytar = require('keytar');
 
 const low = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
+
+const primusClientString = require('./primus.client');
+
+const getIndexHtml = require('./get-index-html');
 
 const keytarServiceName = 'HostParty';
 
@@ -59,12 +79,13 @@ let oauthToken;
 let checkTimestampInterval;
 
 const deleteToken = debounce(() => {
-  keytar.deletePassword(keytarServiceName, config.botUsername);
+  // keytar.deletePassword(keytarServiceName, config.botUsername);
   oauthToken = null;
   config.hasToken = false;
   config.isPartying = false;
   db.set('config', config).write();
   primus.write({ eventName: 'requestConfigResponse', payload: config });
+  primus.write({ eventName: 'deleteToken' });
 }, 300);
 
 const validateToken = debounce(token => {
@@ -96,18 +117,30 @@ const validateToken = debounce(token => {
     });
 }, 500);
 
-const updateTokenInKeychain = debounce((botUsername, payload) => {
-  if (botUsername) {
-    if (payload && payload !== '') {
-      keytar.setPassword(keytarServiceName, botUsername, payload);
-    } else {
-      keytar.deletePassword(keytarServiceName, botUsername);
+// const updateTokenInKeychain = debounce((botUsername, payload) => {
+//   if (botUsername) {
+//     if (payload && payload !== '') {
+//       keytar.setPassword(keytarServiceName, botUsername, payload);
+//     } else {
+//       keytar.deletePassword(keytarServiceName, botUsername);
+//     }
+//   }
+// }, 300);
+
+function getFilteredStreams() {
+  const lowercasedFilteredStreams = config.filteredStreams.map(stream =>
+    stream.toLowerCase()
+  );
+  return state.streams.filter(stream => {
+    console.log({ shouldFilterOutStreams: config.shouldFilterOutStreams });
+    if (config.shouldFilterOutStreams) {
+      return lowercasedFilteredStreams.indexOf(stream.toLowerCase()) === -1;
     }
-  }
-}, 300);
+    return lowercasedFilteredStreams.indexOf(stream.toLowerCase()) !== -1;
+  });
+}
 
 function fetchStreams() {
-  console.log('fetching streams');
   // state.streams = [
   //   "cmgriffing",
   //   "griffingandchill",
@@ -121,7 +154,6 @@ function fetchStreams() {
   if (config.clientId && config.clientId !== '') {
     clientId = config.clientId;
   }
-  console.log('config.titleKeyword', config.titleKeyword);
   return axios
     .get(
       `https://api.twitch.tv/kraken/search/streams?query=${encodeURIComponent(
@@ -136,6 +168,11 @@ function fetchStreams() {
       }
     )
     .then(result => {
+      if (state.streams.length > 1 && result.data.streams.length === 0) {
+        // bail out because we have a bugged fetch
+        logger.info('BUGGED FETCH: bailing out of fetchStreams');
+        return;
+      }
       state.streams = result.data.streams
         .filter(stream => {
           return (
@@ -148,26 +185,15 @@ function fetchStreams() {
           return stream.channel.name;
         });
 
-      const lowercasedFilteredStreams = config.filteredStreams.map(stream =>
-        stream.toLowerCase()
-      );
-
-      state.streams = state.streams.filter(stream => {
-        if (config.shouldFilterOutStreams) {
-          return lowercasedFilteredStreams.indexOf(stream.toLowerCase()) === -1;
-        }
-        return lowercasedFilteredStreams.indexOf(stream.toLowerCase()) !== -1;
-      });
-
       primus.write({
         eventName: 'availableStreamsChange',
-        payload: state.streams.length
+        payload: getFilteredStreams().length
       });
 
+      // eslint-disable-next-line consistent-return
       return state.streams;
     })
     .catch(e => {
-      // console.log({ e });
       primus.write({
         eventName: 'error',
         payload: ` Could not fetch streams.
@@ -177,7 +203,7 @@ function fetchStreams() {
 }
 
 function changeStream() {
-  const filteredStreams = state.streams.filter(stream => {
+  const filteredStreams = getFilteredStreams().filter(stream => {
     return stream !== state.currentStream;
   });
 
@@ -214,25 +240,24 @@ function changeStream() {
 }
 
 function startHostParty(hostPartyConfig) {
-  console.log('starting host party');
+  if (searchInterval) {
+    clearInterval(searchInterval);
+  }
+  searchInterval = setInterval(() => {
+    fetchStreams();
+  }, 60000);
+  fetchStreams()
+    .then(() => {
+      return changeStream();
+    })
+    .catch(() => {});
+
   state.isPartying = true;
   if (hostPartyConfig) {
     config = { ...config, ...hostPartyConfig };
   }
 
   state = cloneDeep(defaultState);
-
-  if (searchInterval) {
-    clearInterval(searchInterval);
-  }
-  searchInterval = setInterval(() => {
-    fetchStreams();
-  }, 30000);
-  fetchStreams()
-    .then(() => {
-      return changeStream();
-    })
-    .catch(() => {});
 
   // coerce config values against defaults
   // eslint-disable-next-line
@@ -245,7 +270,6 @@ function startHostParty(hostPartyConfig) {
   });
   tmiClient.connect();
 
-  // let lastErrorTimestamp = Date.now();
   if (!checkTimestampInterval) {
     checkTimestampInterval = setInterval(() => {
       if (
@@ -254,7 +278,7 @@ function startHostParty(hostPartyConfig) {
       ) {
         changeStream();
       }
-    }, 100);
+    }, 1000);
   }
 
   tmiClient.on('message', (...args) => {
@@ -270,8 +294,10 @@ function stopHostParty() {
     tmiClient = null;
   }
   clearInterval(searchInterval);
+  searchInterval = false;
   if (checkTimestampInterval) {
     clearInterval(checkTimestampInterval);
+    checkTimestampInterval = false;
   }
   state.isPartying = false;
 }
@@ -279,13 +305,12 @@ function stopHostParty() {
 function createMessageHandler() {
   if (!messageHandler) {
     messageHandler = (channel, userstate, message) => {
-      console.log('Message: ', message);
       // check if is next or stay
       if (
         config.selectedMessageTypes.indexOf(userstate['message-type']) === -1
       ) {
         // This message type is not one of the configured events to listen to
-        console.log('Message type is not right: ', userstate['message-type']);
+        logger.info('Message type is not right: ', userstate['message-type']);
         return;
       }
 
@@ -297,8 +322,6 @@ function createMessageHandler() {
         lowerCaseMessage.indexOf(config.stayCommand.toLowerCase()) > -1;
       const hasCurrentCommand =
         lowerCaseMessage.indexOf(config.currentCommand.toLowerCase()) > -1;
-
-      console.log('hasCurrentCommand', hasCurrentCommand);
 
       if (
         hasCurrentCommand &&
@@ -315,7 +338,7 @@ function createMessageHandler() {
       // --- might not be needed
       if (!hasNextCommand && !hasStayCommand) {
         // No command found
-        console.log('No command found');
+        logger.info('No command found');
         return;
       }
       // ---
@@ -359,25 +382,48 @@ function createMessageHandler() {
   }
 }
 
-async function startServers() {
+async function setupServers(settings) {
+  const adapter = new FileSync(path.join(settings.userDataPath, 'db.json'));
+  db = low(adapter);
+  await db.defaults({ config }).write();
+  await db.read();
+
+  config = await db.get('config').value();
+
+  oauthToken = true; // await keytar.getPassword(keytarServiceName, config.botUsername);
+
+  if (oauthToken) {
+    config.hasToken = true;
+  }
+}
+
+async function startServers(serverConfig) {
+  await setupServers(serverConfig);
+
   const app = express();
-  app.use(express.static(path.join(__dirname, '/static')));
+
+  app.get('/', (req, res) => {
+    res.set('Content-Type', 'text/html');
+    res.send(getIndexHtml());
+  });
 
   const server = http.createServer(app);
   primus = new Primus(server, {});
 
+  app.get('/client.js', (req, res) => {
+    res.set('Content-Type', 'text/javascript');
+    res.send(primusClientString);
+  });
+
   server.listen(4242);
 
   primus.on('connection', _spark => {
-    console.log('connection');
-
     validateToken();
 
     createMessageHandler();
 
     _spark.on('data', async data => {
       const { eventName, payload } = data;
-      console.log({ eventName });
       if (eventName === 'configChange') {
         const { isPartying } = state;
         if (isPartying) {
@@ -402,20 +448,6 @@ async function startServers() {
         startHostParty();
       } else if (eventName === 'stopHostParty') {
         stopHostParty();
-      } else if (eventName === 'appUserDataPath') {
-        const adapter = new FileSync(path.join(payload, 'db.json'));
-        db = low(adapter);
-        await db.defaults({ config }).write();
-        await db.read();
-        config = await db.get('config').value();
-        oauthToken = await keytar.getPassword(
-          keytarServiceName,
-          config.botUsername
-        );
-
-        if (oauthToken) {
-          config.hasToken = true;
-        }
       } else if (eventName === 'saveToken') {
         let rawToken = payload.trim();
         if (
@@ -425,7 +457,7 @@ async function startServers() {
           rawToken = rawToken.substring(6);
         }
 
-        updateTokenInKeychain(config.botUsername, rawToken);
+        // updateTokenInKeychain(config.botUsername, rawToken);
         oauthToken = rawToken;
         primus.write({ eventName: 'requestConfigResponse', payload: config });
       } else if (eventName === 'deleteToken') {

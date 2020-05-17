@@ -21,7 +21,11 @@ export default {
           }
         }
       },
-      { test: /\.node$/, loader: 'node-loader' }
+      {
+        test: /\.svg$/,
+        loader: 'svg-inline-loader'
+      },
+      { test: /\.node$/, loader: 'native-ext-loader' }
     ]
   },
 

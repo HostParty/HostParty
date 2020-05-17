@@ -1,6 +1,8 @@
+function getIndexHtml() {
+  return `
 <html>
   <head>
-    <script src="/client"></script>
+    <script src="http://localhost:4242/client.js"></script>
     <style>
       html,
       body {
@@ -133,3 +135,8 @@
     render();
   </script>
 </html>
+
+  `;
+}
+
+module.exports = getIndexHtml;

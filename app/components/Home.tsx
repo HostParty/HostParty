@@ -21,10 +21,14 @@ import {
   List
 } from 'antd';
 
+import { ipcRenderer } from 'electron';
+
 import styled from 'styled-components';
 import { useInterval } from 'beautiful-react-hooks';
+import throttle from 'lodash/throttle';
 
 import MagicGrid from 'react-magic-grid';
+import LogoSVG from './Logo';
 
 const { Group: ButtonGroup } = Button;
 const { Search } = Input;
@@ -92,7 +96,6 @@ const StyledLogoWrapper = styled.div<{ setupFinished: boolean }>`
     }
     return '53px';
   }};
-  background: url('../resources/logo-bordered.svg') center center;
   background-repeat: no-repeat;
   background-size: contain;
   margin: 10px 20px;
@@ -385,8 +388,20 @@ const initialState = {
   shouldFilterOutStreams: true
 };
 
+const showErrorNotification: any = throttle(
+  (title: any, description: any) => {
+    notification.error({
+      message: title,
+      description
+    });
+  },
+  10000,
+  { trailing: false }
+);
+
 export default function Home() {
   const overlaySnippetRef = useRef(null);
+  const copyButtonRef = useRef(null);
 
   const [setupFinished, setSetupFinished] = useState(false);
   console.log({ setupFinished });
@@ -410,6 +425,17 @@ export default function Home() {
 
   const [primus, setPrimus] = useState(null);
 
+  useEffect(() => {
+    const { oauthToken } = localStorage;
+    if (primus && oauthToken && oauthToken !== 'false') {
+      (primus as any).write({
+        eventName: 'saveToken',
+        payload: oauthToken
+      });
+      setState({ hasToken: true });
+    }
+  }, [primus]);
+
   const [isPrimusIntervalCleared, clearPrimusInterval] = useInterval(() => {
     if ((window as any).Primus) {
       const primusInstance = new (window as any).Primus(
@@ -422,6 +448,10 @@ export default function Home() {
           eventName === 'initialConfig' ||
           eventName === 'requestConfigResponse'
         ) {
+          console.log('Primus Config Event: ', {
+            eventName,
+            payload
+          });
           setState(payload);
         } else if (eventName === 'durationChange') {
           setStatus({
@@ -438,10 +468,9 @@ export default function Home() {
         } else if (data.eventName === 'changeStream') {
           setCurrentStreamStart(data.currentStreamStart);
         } else if (eventName === 'error') {
-          notification.error({
-            message: 'Backend Error:',
-            description: payload
-          });
+          showErrorNotification('Backend Error: ', payload);
+        } else if (eventName === 'deleteToken') {
+          localStorage.oauthToken = false;
         } else if (eventName === 'exception') {
           console.log(`I DONT KNOW WHAT TO DO HEEEERRRRREE!!!!! yet...`);
         }
@@ -475,13 +504,36 @@ export default function Home() {
     }
   }, [state]);
 
+  useEffect(() => {
+    const listener = (event: any) => {
+      console.log('dragged', event.target.href);
+      event.dataTransfer.setData('text/uri-list', event.target.href);
+    };
+
+    if (copyButtonRef && copyButtonRef.current) {
+      (copyButtonRef as any).current.addEventListener('dragstart', listener);
+    }
+
+    return () => {
+      if (copyButtonRef && copyButtonRef.current) {
+        (copyButtonRef as any).current.removeEventListener(
+          'dragstart',
+          listener
+        );
+      }
+    };
+  }, [copyButtonRef]);
+
   const copyUrlButton = (
     <a
+      ref={copyButtonRef}
       className="ant-btn ant-btn-link"
       title="Copy"
       type="link"
-      href="http://localhost:4242"
+      href="http://localhost:4242?layer-name=HostParty&layer-width=800&layer-height=600"
       onClick={event => {
+        event.preventDefault();
+        event.stopPropagation();
         try {
           const element = overlaySnippetRef || {};
           if (element.current) {
@@ -504,7 +556,10 @@ export default function Home() {
     <Container data-tid="container">
       <HeaderRow>
         <Title setupFinished={state.hasToken}>HostParty</Title>
-        <StyledLogoWrapper setupFinished={state.hasToken} />
+        <StyledLogoWrapper
+          setupFinished={state.hasToken}
+          dangerouslySetInnerHTML={{ __html: LogoSVG }}
+        />
         <LogoutButton
           icon={<LogoutOutlined />}
           size="large"
@@ -523,7 +578,7 @@ export default function Home() {
         </LogoutButton>
       </HeaderRow>
       <LoginForm setupFinished={state.hasToken}>
-        <p>
+        <p danger>
           Welcome. We need an OAuth token to continue. You can get one here:
           <br />
           <a
@@ -534,78 +589,82 @@ export default function Home() {
             https://twitchapps.com/tmi
           </a>
         </p>
-        <div className="ant-row ant-form-item">
-          <div className="ant-col ant-col-8 ant-form-item-label">
-            <label className="label" title="Input" htmlFor="bot-username">
-              Bot Username
-            </label>
-          </div>
-          <div className="ant-col ant-col-16 ant-form-item-control">
-            <div className="ant-form-item-control-input">
-              <div className="ant-form-item-control-input-content">
-                <Input
-                  id="bot-username"
-                  name="bot-username"
-                  value={state.botUsername}
-                  onChange={(event: any) => {
-                    setState({ botUsername: event.target.value });
-                    if (primus) {
-                      (primus as any).write({
-                        eventName: 'configChange',
-                        payload: {
-                          ...state,
-                          botUsername: event.target.value
-                        }
-                      });
-                    }
-                  }}
-                />
+        <form
+          onSubmit={(e: any) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // todo validate inputs
+            setState({
+              hasToken: true
+            });
+            (primus as any).write({ eventName: 'validateToken' });
+          }}
+        >
+          <div className="ant-row ant-form-item">
+            <div className="ant-col ant-col-8 ant-form-item-label">
+              <label className="label" title="Input" htmlFor="bot-username">
+                Bot Username
+              </label>
+            </div>
+            <div className="ant-col ant-col-16 ant-form-item-control">
+              <div className="ant-form-item-control-input">
+                <div className="ant-form-item-control-input-content">
+                  <Input
+                    id="bot-username"
+                    name="bot-username"
+                    value={state.botUsername}
+                    onChange={(event: any) => {
+                      setState({ botUsername: event.target.value });
+                      if (primus) {
+                        (primus as any).write({
+                          eventName: 'configChange',
+                          payload: {
+                            ...state,
+                            botUsername: event.target.value
+                          }
+                        });
+                      }
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div className="ant-row ant-form-item">
-          <div className="ant-col ant-col-8 ant-form-item-label">
-            <label className="label" title="Input" htmlFor="bot-token">
-              Bot Token
-            </label>
-          </div>
-          <div className="ant-col ant-col-16 ant-form-item-control">
-            <div className="ant-form-item-control-input">
-              <div className="ant-form-item-control-input-content">
-                <Input
-                  id="bot-token"
-                  name="bot-token"
-                  type="password"
-                  value={state.botToken}
-                  onChange={(event: any) => {
-                    if (primus) {
-                      (primus as any).write({
-                        eventName: 'saveToken',
-                        payload: event.target.value
-                      });
-                    }
-                  }}
-                />
+          <div className="ant-row ant-form-item">
+            <div className="ant-col ant-col-8 ant-form-item-label">
+              <label className="label" title="Input" htmlFor="bot-token">
+                Bot Token
+              </label>
+            </div>
+            <div className="ant-col ant-col-16 ant-form-item-control">
+              <div className="ant-form-item-control-input">
+                <div className="ant-form-item-control-input-content">
+                  <Input
+                    id="bot-token"
+                    name="bot-token"
+                    type="password"
+                    value={state.botToken}
+                    onChange={(event: any) => {
+                      localStorage.oauthToken = event.target.value;
+                      if (primus) {
+                        (primus as any).write({
+                          eventName: 'saveToken',
+                          payload: event.target.value
+                        });
+                      }
+                    }}
+                  />
+                </div>
               </div>
             </div>
+            <LoginButtonWrapper>
+              <LoginButton htmlType="submit" type="primary">
+                Login
+              </LoginButton>
+            </LoginButtonWrapper>
           </div>
-          <LoginButtonWrapper>
-            <LoginButton
-              type="primary"
-              onClick={() => {
-                // todo validate inputs
-                setState({
-                  hasToken: true
-                });
-                (primus as any).write({ eventName: 'validateToken' });
-              }}
-            >
-              Login
-            </LoginButton>
-          </LoginButtonWrapper>
-        </div>
+        </form>
       </LoginForm>
       <AdminForm setupFinished={state.hasToken}>
         <MagicGrid static maxColumns={3} animate>
@@ -692,27 +751,29 @@ export default function Home() {
                 title="Streams"
                 extra={
                   // eslint-disable-next-line react/jsx-wrap-multilines
-                  <Button
-                    type="link"
-                    onClick={() => {
-                      const newFilteredStreams: any[] = [];
-                      setState({
-                        filteredStreams: newFilteredStreams
-                      });
-
-                      if (primus) {
-                        (primus as any).write({
-                          eventName: 'configChange',
-                          payload: {
-                            ...state,
-                            filteredStreams: newFilteredStreams
-                          }
+                  state.filteredStreams.length > 0 && (
+                    <Button
+                      type="link"
+                      onClick={() => {
+                        const newFilteredStreams: any[] = [];
+                        setState({
+                          filteredStreams: newFilteredStreams
                         });
-                      }
-                    }}
-                  >
-                    Delete All
-                  </Button>
+
+                        if (primus) {
+                          (primus as any).write({
+                            eventName: 'configChange',
+                            payload: {
+                              ...state,
+                              filteredStreams: newFilteredStreams
+                            }
+                          });
+                        }
+                      }}
+                    >
+                      Delete All
+                    </Button>
+                  )
                 }
               >
                 <StreamFiltersListTypeWrapper>
@@ -721,16 +782,19 @@ export default function Home() {
                   </span>
                   <span>
                     <Switch
-                      defaultChecked={!state.shouldFilterOutStreams}
+                      checked={!state.shouldFilterOutStreams}
                       onChange={checked => {
-                        setState({ shouldFilterOutStreams: checked });
+                        console.log({ checked });
+                        setState({
+                          shouldFilterOutStreams: !state.shouldFilterOutStreams
+                        });
 
                         if (primus) {
                           (primus as any).write({
                             eventName: 'configChange',
                             payload: {
                               ...state,
-                              shouldFilterOutStreams: checked
+                              shouldFilterOutStreams: !state.shouldFilterOutStreams
                             }
                           });
                         }
@@ -1052,7 +1116,9 @@ export default function Home() {
                 </StatusCell>
                 <StatusCell>
                   <label>Time Remaining</label>
-                  {state.isPartying && <div>{`${secondsRemaining}s`}</div>}
+                  {state.isPartying && (
+                    <div>{`${Math.max(secondsRemaining, 0)}s`}</div>
+                  )}
                   {!state.isPartying && <div> -- </div>}
                 </StatusCell>
                 <StatusCell>

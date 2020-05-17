@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="img-src 'data:'" />
+    <title>HostParty</title>
+    <style>
+      * {
+        font-family: 'Arimo', sans-serif;
+      }
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        font-family: 'Lobster', cursive;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script>
+      if (typeof process === 'object') {
+        const scripts = [];
+
+        const expressAppUrl = 'http://127.0.0.1:4242/index.html';
+
+        const { ipcRenderer } = require('electron');
+
+        const app = require('electron').remote.app;
+        console.log('path', app.getAppPath());
+        const node = require('child_process').fork(
+          `${app.getAppPath()}/server/server.js`,
+          []
+        );
+
+        node.on('close', code => {
+          console.log(`child process close all stdio with code ${code}`);
+        });
+
+        node.on('exit', code => {
+          console.log(`child process exited with code ${code}`);
+        });
+
+        node.on('message', console.log);
+        node.on('error', console.log);
+      }
+    </script>
+  </body>
+</html>
