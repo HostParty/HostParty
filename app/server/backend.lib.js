@@ -1,12 +1,12 @@
 const path = require('path');
 const winston = require('winston');
+const { app: electronApp, BrowserWindow } = require('electron');
 
 const logger = winston.createLogger({
   format: winston.format.json(),
   transports: [
     new winston.transports.File({
-      filename:
-        '/Users/cmgriffing/Library/Application Support/HostParty/backend.lib.log',
+      filename: path.join(electronApp.getPath('appData'), 'backend.lib.log'),
       options: { flags: 'w' }
     })
   ]
