@@ -44,8 +44,9 @@ li {
 
 a {
   color: white;
-  opacity: 0.75;
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-style: #096dd9;
+  opacity: 0.7;
 }
 
 .ant-card-extra a {
@@ -53,7 +54,7 @@ a {
 }
 
 a:hover {
-  opacity: 1;
+  opacity: 0.99;
   text-decoration: none;
   cursor: pointer;
 }

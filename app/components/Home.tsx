@@ -219,7 +219,8 @@ const CommandLabelRow = styled.div`
 `;
 
 const LoginButtonWrapper = styled.div`
-  text-align: right;
+  text-align: center;
+  margin-top: 40px;
   width: 100%;
 `;
 
@@ -578,93 +579,34 @@ export default function Home() {
         </LogoutButton>
       </HeaderRow>
       <LoginForm setupFinished={state.hasToken}>
-        <p danger>
-          Welcome. We need an OAuth token to continue. You can get one here:
-          <br />
-          <a
-            href="https://twitchapps.com/tmi"
+        <LoginButtonWrapper>
+          <LoginButton
             target="_blank"
-            rel="noopener noreferrer"
+            type="primary"
+            size="large"
+            onClick={() => {
+              const handleWindowMessage = function(message: any) {
+                if (primus) {
+                  (primus as any).write({
+                    eventName: 'saveToken',
+                    payload: message.data
+                  });
+                  setState({ hasToken: true });
+                  setSetupFinished(true);
+                }
+              };
+              window.addEventListener('message', handleWindowMessage, {
+                once: true
+              });
+              //
+              window.open(
+                'https://id.twitch.tv/oauth2/authorize?client_id=6mpwge1p7z0yxjsibbbupjuepqhqe2&redirect_uri=http://localhost:4242/oauth/redirect&response_type=token&scope=user_read+chat:edit+chat:read'
+              );
+            }}
           >
-            https://twitchapps.com/tmi
-          </a>
-        </p>
-        <form
-          onSubmit={(e: any) => {
-            e.preventDefault();
-            e.stopPropagation();
-            // todo validate inputs
-            setState({
-              hasToken: true
-            });
-            (primus as any).write({ eventName: 'validateToken' });
-          }}
-        >
-          <div className="ant-row ant-form-item">
-            <div className="ant-col ant-col-8 ant-form-item-label">
-              <label className="label" title="Input" htmlFor="bot-username">
-                Bot Username
-              </label>
-            </div>
-            <div className="ant-col ant-col-16 ant-form-item-control">
-              <div className="ant-form-item-control-input">
-                <div className="ant-form-item-control-input-content">
-                  <Input
-                    id="bot-username"
-                    name="bot-username"
-                    value={state.botUsername}
-                    onChange={(event: any) => {
-                      setState({ botUsername: event.target.value });
-                      if (primus) {
-                        (primus as any).write({
-                          eventName: 'configChange',
-                          payload: {
-                            ...state,
-                            botUsername: event.target.value
-                          }
-                        });
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="ant-row ant-form-item">
-            <div className="ant-col ant-col-8 ant-form-item-label">
-              <label className="label" title="Input" htmlFor="bot-token">
-                Bot Token
-              </label>
-            </div>
-            <div className="ant-col ant-col-16 ant-form-item-control">
-              <div className="ant-form-item-control-input">
-                <div className="ant-form-item-control-input-content">
-                  <Input
-                    id="bot-token"
-                    name="bot-token"
-                    type="password"
-                    value={state.botToken}
-                    onChange={(event: any) => {
-                      localStorage.oauthToken = event.target.value;
-                      if (primus) {
-                        (primus as any).write({
-                          eventName: 'saveToken',
-                          payload: event.target.value
-                        });
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-            <LoginButtonWrapper>
-              <LoginButton htmlType="submit" type="primary">
-                Login
-              </LoginButton>
-            </LoginButtonWrapper>
-          </div>
-        </form>
+            Login with OAuth
+          </LoginButton>
+        </LoginButtonWrapper>
       </LoginForm>
       <AdminForm setupFinished={state.hasToken}>
         <MagicGrid static maxColumns={3} animate>

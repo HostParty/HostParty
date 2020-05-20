@@ -12,8 +12,12 @@ const logger = winston.createLogger({
   ]
 });
 
-process.on('uncaughtException', logger.info);
-process.on('unhandledRejection', logger.info);
+process.on('uncaughtException', error => {
+  logger.info(error);
+});
+process.on('unhandledRejection', error => {
+  logger.info(error);
+});
 
 const http = require('http');
 
@@ -31,8 +35,10 @@ const FileSync = require('lowdb/adapters/FileSync');
 const primusClientString = require('./primus.client');
 
 const getIndexHtml = require('./get-index-html');
+const getCallbackHtml = require('./get-callback-html');
 
 const keytarServiceName = 'HostParty';
+let clientId = '6mpwge1p7z0yxjsibbbupjuepqhqe2';
 
 const defaultState = {
   streams: [],
@@ -80,6 +86,7 @@ let checkTimestampInterval;
 
 const deleteToken = debounce(() => {
   // keytar.deletePassword(keytarServiceName, config.botUsername);
+  console.log('deleting token');
   oauthToken = null;
   config.hasToken = false;
   config.isPartying = false;
@@ -87,6 +94,21 @@ const deleteToken = debounce(() => {
   primus.write({ eventName: 'requestConfigResponse', payload: config });
   primus.write({ eventName: 'deleteToken' });
 }, 300);
+
+function fetchUserNameFromToken() {
+  return axios
+    .get('https://api.twitch.tv/kraken/user', {
+      headers: {
+        Accept: 'application/vnd.twitchtv.v5+json',
+        'Client-ID': clientId,
+        Authorization: `OAuth ${oauthToken}`
+      }
+    })
+    .then(result => {
+      console.log('data', result.data.name);
+      return result.data.name;
+    });
+}
 
 const validateToken = debounce(token => {
   let innerToken = token;
@@ -150,7 +172,6 @@ function fetchStreams() {
   // ];
 
   // This should be fine to have here hardcoded. It is a public value.
-  let clientId = '6mpwge1p7z0yxjsibbbupjuepqhqe2';
   if (config.clientId && config.clientId !== '') {
     clientId = config.clientId;
   }
@@ -162,8 +183,8 @@ function fetchStreams() {
       {
         headers: {
           Accept: 'application/vnd.twitchtv.v5+json',
-          'Client-ID': clientId,
-          Authorization: `OAuth ${oauthToken}`
+          'Client-ID': clientId
+          // Authorization: `OAuth ${oauthToken}`
         }
       }
     )
@@ -239,7 +260,7 @@ function changeStream() {
   });
 }
 
-function startHostParty(hostPartyConfig) {
+async function startHostParty(hostPartyConfig) {
   if (searchInterval) {
     clearInterval(searchInterval);
   }
@@ -259,8 +280,8 @@ function startHostParty(hostPartyConfig) {
 
   state = cloneDeep(defaultState);
 
-  // coerce config values against defaults
-  // eslint-disable-next-line
+  config.botUsername = await fetchUserNameFromToken();
+  // eslint-disable-next-line new-cap
   tmiClient = new tmi.client({
     channels: [config.partyChannel],
     identity: {
@@ -415,6 +436,11 @@ async function startServers(serverConfig) {
     res.send(primusClientString);
   });
 
+  app.get('/oauth/redirect', (req, res) => {
+    res.set('Content-Type', 'text/html');
+    res.send(getCallbackHtml());
+  });
+
   server.listen(4242);
 
   primus.on('connection', _spark => {
@@ -456,9 +482,9 @@ async function startServers(serverConfig) {
         ) {
           rawToken = rawToken.substring(6);
         }
-
         // updateTokenInKeychain(config.botUsername, rawToken);
         oauthToken = rawToken;
+        config.hasToken = true;
         primus.write({ eventName: 'requestConfigResponse', payload: config });
       } else if (eventName === 'deleteToken') {
         deleteToken();
