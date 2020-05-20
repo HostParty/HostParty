@@ -1,7 +1,7 @@
 {
   "name": "hostparty",
   "productName": "HostParty",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Twitch bot app for hackathons, etc.",
   "main": "./main.prod.js",
   "author": {
