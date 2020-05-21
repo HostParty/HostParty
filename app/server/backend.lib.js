@@ -6,7 +6,7 @@ const logger = winston.createLogger({
   format: winston.format.json(),
   transports: [
     new winston.transports.File({
-      filename: path.join(electronApp.getPath('appData'), 'backend.lib.log'),
+      filename: 'backend.lib.log', // path.join(electronApp.getPath('appData'), 'backend.lib.log'),
       options: { flags: 'w' }
     })
   ]
@@ -85,7 +85,6 @@ let oauthToken;
 let checkTimestampInterval;
 
 const deleteToken = debounce(() => {
-  // keytar.deletePassword(keytarServiceName, config.botUsername);
   console.log('deleting token');
   oauthToken = null;
   config.hasToken = false;
@@ -105,7 +104,6 @@ function fetchUserNameFromToken() {
       }
     })
     .then(result => {
-      console.log('data', result.data.name);
       return result.data.name;
     });
 }
@@ -154,7 +152,6 @@ function getFilteredStreams() {
     stream.toLowerCase()
   );
   return state.streams.filter(stream => {
-    console.log({ shouldFilterOutStreams: config.shouldFilterOutStreams });
     if (config.shouldFilterOutStreams) {
       return lowercasedFilteredStreams.indexOf(stream.toLowerCase()) === -1;
     }
@@ -163,32 +160,25 @@ function getFilteredStreams() {
 }
 
 function fetchStreams() {
-  // state.streams = [
-  //   "cmgriffing",
-  //   "griffingandchill",
-  //   "theprimeagen",
-  //   "strager",
-  //   "newnoiseworks",
-  // ];
-
   // This should be fine to have here hardcoded. It is a public value.
   if (config.clientId && config.clientId !== '') {
     clientId = config.clientId;
   }
   return axios
     .get(
-      `https://api.twitch.tv/kraken/search/streams?query=${encodeURIComponent(
+      `https://api.twitch.tv/kraken/search/streams?limit=100&query=${encodeURIComponent(
         config.titleKeyword
       )}`,
       {
         headers: {
           Accept: 'application/vnd.twitchtv.v5+json',
-          'Client-ID': clientId
-          // Authorization: `OAuth ${oauthToken}`
+          'Client-ID': clientId,
+          Authorization: `OAuth ${oauthToken}`
         }
       }
     )
     .then(result => {
+      logger.info({ dataLength: result.data.length });
       if (state.streams.length > 1 && result.data.streams.length === 0) {
         // bail out because we have a bugged fetch
         logger.info('BUGGED FETCH: bailing out of fetchStreams');
@@ -215,6 +205,7 @@ function fetchStreams() {
       return state.streams;
     })
     .catch(e => {
+      logger.info({ e });
       primus.write({
         eventName: 'error',
         payload: ` Could not fetch streams.
@@ -229,6 +220,7 @@ function changeStream() {
   });
 
   if (filteredStreams.length === 0) {
+    logger.info({ streams: state.streams });
     primus.write({ eventName: 'error', payload: 'No other streams found.' });
     return;
   }

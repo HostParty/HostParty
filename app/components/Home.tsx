@@ -161,7 +161,8 @@ const AdminForm = styled.div<{ setupFinished: boolean }>`
   transition: opacity 1s, height 1s;
   text-align: center;
   width: 100%;
-  overflow: hidden;
+  overflow-y: auto;
+  height: calc(100vh - 100px);
   text-align: left;
   margin-left: auto;
   margin-right: auto;
@@ -220,7 +221,7 @@ const CommandLabelRow = styled.div`
 
 const LoginButtonWrapper = styled.div`
   text-align: center;
-  margin-top: 40px;
+  padding-top: 40px;
   width: 100%;
 `;
 
@@ -265,6 +266,27 @@ const StartButton = styled(Button)<{ isPartying: boolean }>`
 
   ${(props: any) => {
     if (!props.isPartying) {
+      return `
+        opacity: 1;
+        pointer-events: initial;
+      `;
+    }
+    return `
+      opacity: 0;
+      pointer-events: none;
+    `;
+  }}
+`;
+
+const StoppingButton = styled(Button)<{ isPartying: boolean }>`
+  transition: opacity 300ms;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+
+  ${(props: any) => {
+    if (props.isStartDisabled) {
       return `
         opacity: 1;
         pointer-events: initial;
@@ -405,7 +427,7 @@ export default function Home() {
   const copyButtonRef = useRef(null);
 
   const [setupFinished, setSetupFinished] = useState(false);
-  console.log({ setupFinished });
+  const [isStartDisabled, setIsStartDisabled] = useState(false);
 
   const [state, setState] = useReducer((_state: any, newState: any) => {
     return {
@@ -449,10 +471,6 @@ export default function Home() {
           eventName === 'initialConfig' ||
           eventName === 'requestConfigResponse'
         ) {
-          console.log('Primus Config Event: ', {
-            eventName,
-            payload
-          });
           setState(payload);
         } else if (eventName === 'durationChange') {
           setStatus({
@@ -484,7 +502,6 @@ export default function Home() {
       clearPrimusInterval();
     }
   }, 200);
-  console.log({ isPrimusIntervalCleared });
 
   const [secondsRemaining, setSecondsRemaining] = useState(0);
 
@@ -497,7 +514,6 @@ export default function Home() {
     }
     setSecondsRemaining(newSecondsRemaining);
   }, 1000);
-  console.log({ isTimeLeftCleared, clearTimeLeftInterval });
 
   useEffect(() => {
     if (state.hasToken) {
@@ -585,7 +601,7 @@ export default function Home() {
             type="primary"
             size="large"
             onClick={() => {
-              const handleWindowMessage = function(message: any) {
+              const handleWindowMessage = (message: any) => {
                 if (primus) {
                   (primus as any).write({
                     eventName: 'saveToken',
@@ -609,7 +625,7 @@ export default function Home() {
         </LoginButtonWrapper>
       </LoginForm>
       <AdminForm setupFinished={state.hasToken}>
-        <MagicGrid static maxColumns={3} animate>
+        <MagicGrid static maxColumns={3} animate useMin>
           <AdminCardWrapper>
             <Card title="Channel Details">
               <div className="ant-row ant-form-item">
@@ -726,7 +742,6 @@ export default function Home() {
                     <Switch
                       checked={!state.shouldFilterOutStreams}
                       onChange={checked => {
-                        console.log({ checked });
                         setState({
                           shouldFilterOutStreams: !state.shouldFilterOutStreams
                         });
@@ -948,75 +963,43 @@ export default function Home() {
             </Card>
           </AdminCardWrapper>
           <AdminCardWrapper>
-            <Card title="Timers">
-              <SliderColumns>
-                {timers.map(timer => (
-                  <CustomSliderWrapper key={timer.key}>
-                    <div>
-                      <label
-                        className="label"
-                        title="Input"
-                        htmlFor={`${timer.key}-timeout`}
-                      >
-                        {timer.label}
-                      </label>
-                    </div>
-                    <div>
-                      <div className="ant-form-item-control-input">
-                        <div className="ant-form-item-control-input-content">
-                          <CustomSlider
-                            id={`${timer.key}-timeout`}
-                            min={5000}
-                            max={120000}
-                            step={1000}
-                            value={state[timer.key]}
-                            onChange={(value: any) => {
-                              setState({ [timer.key]: value });
-                              if (primus) {
-                                (primus as any).write({
-                                  eventName: 'configChange',
-                                  payload: {
-                                    ...state,
-                                    [timer.key]: value
-                                  }
-                                });
-                              }
-                            }}
-                            tipFormatter={() => `${state[timer.key] / 1000}s`}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </CustomSliderWrapper>
-                ))}
-              </SliderColumns>
-            </Card>
-          </AdminCardWrapper>
-
-          <AdminCardWrapper>
             <Card title="Controls">
               <ControlWrapper>
-                <StartButton
-                  type="primary"
-                  size="large"
-                  icon={<PlayCircleFilled />}
-                  onClick={() => {
-                    setState({ isPartying: !state.isPartying });
-                    (primus as any).write({ eventName: 'startHostParty' });
-                    if (primus) {
-                      (primus as any).write({
-                        eventName: 'configChange',
-                        payload: {
-                          ...state,
-                          isPartying: !state.isPartying
-                        }
-                      });
-                    }
-                  }}
-                  isPartying={state.isPartying}
-                >
-                  Start
-                </StartButton>
+                {!isStartDisabled && (
+                  <StartButton
+                    type="primary"
+                    size="large"
+                    icon={<PlayCircleFilled />}
+                    onClick={() => {
+                      setState({ isPartying: !state.isPartying });
+                      (primus as any).write({ eventName: 'startHostParty' });
+                      if (primus) {
+                        (primus as any).write({
+                          eventName: 'configChange',
+                          payload: {
+                            ...state,
+                            isPartying: !state.isPartying
+                          }
+                        });
+                      }
+                    }}
+                    isPartying={state.isPartying}
+                  >
+                    Start
+                  </StartButton>
+                )}
+
+                {isStartDisabled && (
+                  <StoppingButton
+                    type="primary"
+                    size="large"
+                    icon={<PlayCircleFilled />}
+                    disabled
+                    isStartDisabled={isStartDisabled}
+                  >
+                    Stopping...
+                  </StoppingButton>
+                )}
                 <CustomButtonGroup isPartying={state.isPartying}>
                   <Button
                     type="primary"
@@ -1026,6 +1009,10 @@ export default function Home() {
                     onClick={() => {
                       setState({ isPartying: !state.isPartying });
                       (primus as any).write({ eventName: 'stopHostParty' });
+                      setIsStartDisabled(true);
+                      setTimeout(() => {
+                        setIsStartDisabled(false);
+                      }, 8000);
                       if (primus) {
                         (primus as any).write({
                           eventName: 'configChange',
@@ -1069,6 +1056,52 @@ export default function Home() {
                   {!state.isPartying && <div> -- </div>}
                 </StatusCell>
               </StatusRow>
+            </Card>
+          </AdminCardWrapper>
+
+          <AdminCardWrapper>
+            <Card title="Timers">
+              <SliderColumns>
+                {timers.map(timer => (
+                  <CustomSliderWrapper key={timer.key}>
+                    <div>
+                      <label
+                        className="label"
+                        title="Input"
+                        htmlFor={`${timer.key}-timeout`}
+                      >
+                        {timer.label}
+                      </label>
+                    </div>
+                    <div>
+                      <div className="ant-form-item-control-input">
+                        <div className="ant-form-item-control-input-content">
+                          <CustomSlider
+                            id={`${timer.key}-timeout`}
+                            min={5000}
+                            max={120000}
+                            step={1000}
+                            value={state[timer.key]}
+                            onChange={(value: any) => {
+                              setState({ [timer.key]: value });
+                              if (primus) {
+                                (primus as any).write({
+                                  eventName: 'configChange',
+                                  payload: {
+                                    ...state,
+                                    [timer.key]: value
+                                  }
+                                });
+                              }
+                            }}
+                            tipFormatter={() => `${state[timer.key] / 1000}s`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </CustomSliderWrapper>
+                ))}
+              </SliderColumns>
             </Card>
           </AdminCardWrapper>
         </MagicGrid>

@@ -129,7 +129,7 @@ const createWindow = async () => {
   mainWindow = new BrowserWindow({
     show: false,
     width: 1366,
-    height: 1100,
+    height: 900,
     webPreferences: {
       nodeIntegration: true
     }

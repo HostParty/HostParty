@@ -69,7 +69,6 @@ function getIndexHtml() {
     };
 
     primus.on('data', function message(data) {
-      console.log({ data });
       // the message we've received.
       if (data.eventName === 'durationChange') {
         state.currentStreamDurationMs = data.payload;
@@ -107,7 +106,6 @@ function getIndexHtml() {
     }
 
     function render() {
-      console.log('rerendering');
 
       if (!playerElement) {
         console.log('No player element?');
@@ -120,11 +118,6 @@ function getIndexHtml() {
     }
 
     setInterval(function() {
-      console.log(
-        'interval',
-        state.currentStreamDurationMs,
-        state.currentStreamStart
-      );
       const percentage =
         ((Date.now() - state.currentStreamStart) /
           state.currentStreamDurationMs) *

@@ -12,8 +12,6 @@ const logger = winston.createLogger({
   ]
 });
 
-logger.info('hello server');
-
 process.on('uncaughtException', logger.info);
 process.on('unhandledRejection', logger.info);
 
