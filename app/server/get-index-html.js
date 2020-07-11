@@ -98,7 +98,7 @@ function getIndexHtml() {
         return (
           'https://player.twitch.tv/?channel=' +
           channelName +
-          '&enableExtensions=false&muted=false&player=popout&volume=1'
+          '&enableExtensions=false&muted=false&player=popout&volume=1&parent=localhost'
         );
       } else {
         return '';
